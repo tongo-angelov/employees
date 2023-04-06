@@ -1,4 +1,5 @@
 import { createContext, useEffect, useState } from "react";
+
 import {
   calculateOverlap,
   hasValidHeaders,
@@ -78,6 +79,8 @@ export const AppContextProvider = ({ children }: AppContextProviderProps) => {
     if (!file) return;
     setLoading("Parsing");
 
+    setPairs(null);
+
     if (!isValidCSV(file)) {
       setError("Invalid file format");
       return;
@@ -144,6 +147,10 @@ export const AppContextProvider = ({ children }: AppContextProviderProps) => {
     let _projects: ProjectData[] = [];
 
     projectIds.forEach((id) => {
+      // todo: fix bug where if multiple records exist per user per project
+      // 143,12,2013-11-01,2014-01-05
+      // 143,12,2013-11-01,2014-01-05
+
       // get all employees that worked on given project
       const employees = mappedData!.filter((data) => data.projectID === id);
       // if only 1 employee worked on the project
@@ -206,11 +213,16 @@ export const AppContextProvider = ({ children }: AppContextProviderProps) => {
       });
     });
 
+    if (pairs.length === 0) {
+      setError("No overlaped projects");
+      return;
+    }
+
     pairs.sort((a, b) => b.time - a.time);
     console.log("pairs", pairs);
     setPairs(pairs);
 
-    setLoading("Done");
+    setLoading("");
   };
 
   const context = {
