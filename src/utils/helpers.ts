@@ -1,3 +1,5 @@
+import { DataRow } from "../context/types";
+
 export const isValidCSV = (f: File): boolean => {
   return f.type === "text/csv";
 };
@@ -17,12 +19,19 @@ export const hasValidHeaders = (header: string, headers: string[]): boolean => {
   return isValid;
 };
 
-export const parseDate = (date: string): string => {
-  // todo: check if valid year/month/day (e.g. 2000-13-32)
-  if (date.match(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/)) return date;
+export const parseDate = (date: string): number => {
+  if (date.match(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/))
+    return new Date(date).getTime();
+  if (Number(date)) return Number(date);
+  return new Date().getTime();
+};
 
-  let result;
-  if (Number(date)) result = new Date(Number(date));
-  else result = new Date();
-  return result.toJSON().slice(0, 10);
+export const calculateOverlap = (a: DataRow, b: DataRow): number => {
+  const start = a.fromDate > b.fromDate ? a.fromDate : b.fromDate;
+  const end = a.toDate < b.toDate ? a.toDate : b.toDate;
+  const overlap = end - start;
+  if (overlap < 0) return 0;
+
+  // todo - add constant
+  return Math.floor(overlap / 1000 / 60 / 60 / 24);
 };

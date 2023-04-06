@@ -1,11 +1,12 @@
 import { createContext, useEffect, useState } from "react";
 import {
+  calculateOverlap,
   hasValidHeaders,
   isFileEmpty,
   isValidCSV,
   parseDate,
 } from "../utils/helpers";
-import { AppState, DataRow } from "./types";
+import { AppState, DataRow, ProjectData, ProjectPair } from "./types";
 
 export type ContextType = {
   state: AppState;
@@ -33,6 +34,8 @@ export const AppContextProvider = ({ children }: AppContextProviderProps) => {
   });
   const [file, setFile] = useState<File>();
   const [fileData, setFileData] = useState<string | null>(null);
+  const [mappedData, setMappedData] = useState<DataRow[] | null>(null);
+  const [finalData, setFinalData] = useState();
 
   useEffect(() => {
     validateFile();
@@ -41,6 +44,10 @@ export const AppContextProvider = ({ children }: AppContextProviderProps) => {
   useEffect(() => {
     parseData();
   }, [fileData]);
+
+  useEffect(() => {
+    finalizeData();
+  }, [mappedData]);
 
   const setLoading = (msg: string) => {
     setState({
@@ -92,17 +99,73 @@ export const AppContextProvider = ({ children }: AppContextProviderProps) => {
     }
 
     const rows = fileData.slice(fileData.indexOf("\n") + 1).split("\n");
-    const data: DataRow[] = rows.map((row) => {
-      const values = row.split(",");
-      return {
-        empID: values[0],
-        projectID: values[1],
-        fromDate: values[2],
-        toDate: parseDate(values[3]),
-      } as DataRow;
+    if (rows.length === 0) {
+      setError("Missing data");
+      return;
+    }
+    try {
+      const data: DataRow[] = rows.map((row) => {
+        const values = row.split(",");
+        if (values.length < 4) throw new Error("Corrupted data");
+
+        const result = {
+          empID: values[0],
+          projectID: values[1],
+          fromDate: parseDate(values[2]),
+          toDate: parseDate(values[3]),
+        };
+        return result;
+      });
+      console.log("mapped", data);
+      setMappedData(data);
+      setLoading("Mapped");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const finalizeData = () => {
+    if (!mappedData) return;
+    setLoading("Finalizing");
+
+    // group projects
+    let projectIds = new Set<string>();
+    mappedData.map((item) => projectIds.add(item.projectID));
+
+    let projects: ProjectData[] = [];
+
+    projectIds.forEach((id) => {
+      // get all employees that worked on given project
+      const employees = mappedData.filter((data) => data.projectID === id);
+      // if only 1 employee worked on the project
+      if (employees.length === 1) return;
+
+      let projectPairs: ProjectPair[] = [];
+      employees.forEach((emp, index) => {
+        // if last item return - no pair left
+        if (index + 1 === employees.length) return;
+        // get all other employees
+        const remaining = employees.slice(index + 1);
+        remaining.forEach((next) => {
+          projectPairs.push({
+            employees: {
+              aID: emp.empID,
+              bID: next.empID,
+            },
+            time: calculateOverlap(emp, next),
+          });
+        });
+      });
+
+      projects.push({
+        id,
+        data: [...projectPairs].sort((a, b) => b.time - a.time),
+      });
     });
-    console.log(data);
-    setLoading("Mapped");
+
+    console.log("projects", projects);
+
+    setLoading("Finalized");
   };
 
   const context = {
