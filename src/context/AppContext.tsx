@@ -1,15 +1,24 @@
 import { createContext, useEffect, useState } from "react";
-import { isFileEmpty, isValidCSV } from "../utils/helpers";
+import {
+  hasValidHeaders,
+  isFileEmpty,
+  isValidCSV,
+  parseDate,
+} from "../utils/helpers";
+import { AppState, DataRow } from "./types";
 
 export type ContextType = {
+  state: AppState;
   setFile: React.Dispatch<React.SetStateAction<File | undefined>>;
-  error: string | null;
   data: any[];
 };
 
 export const AppContext = createContext<ContextType>({
+  state: {
+    state: "",
+    error: "",
+  },
   setFile: () => {},
-  error: null,
   data: [],
 });
 
@@ -18,8 +27,11 @@ type AppContextProviderProps = {
 };
 
 export const AppContextProvider = ({ children }: AppContextProviderProps) => {
+  const [state, setState] = useState<AppState>({
+    state: "",
+    error: "",
+  });
   const [file, setFile] = useState<File>();
-  const [error, setError] = useState<string | null>(null);
   const [fileData, setFileData] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,17 +42,31 @@ export const AppContextProvider = ({ children }: AppContextProviderProps) => {
     parseData();
   }, [fileData]);
 
+  const setLoading = (msg: string) => {
+    setState({
+      state: msg,
+      error: "",
+    });
+  };
+
+  const setError = (e: string) => {
+    setState({
+      state: "",
+      error: e,
+    });
+  };
+
   const validateFile = () => {
     if (!file) return;
-    setError(null);
+    setLoading("Parsing");
 
     if (!isValidCSV(file)) {
-      setError("Invalid file format!");
+      setError("Invalid file format");
       return;
     }
 
     if (isFileEmpty(file)) {
-      setError("Empty file selected!");
+      setError("Empty file selected");
       return;
     }
 
@@ -50,18 +76,38 @@ export const AppContextProvider = ({ children }: AppContextProviderProps) => {
       setFileData(text ? String(text) : null);
     };
     reader.readAsText(file);
+    setLoading("Parsed");
   };
 
   const parseData = () => {
     if (!fileData) return;
+    setLoading("Mapping");
 
-    console.log("file parsed");
-    console.log(fileData);
+    const header = fileData.slice(0, fileData.indexOf("\n"));
+    if (
+      !hasValidHeaders(header, ["EmpID", "ProjectID", "DateFrom", "DateTo"])
+    ) {
+      setError("Missing required headers");
+      return;
+    }
+
+    const rows = fileData.slice(fileData.indexOf("\n") + 1).split("\n");
+    const data: DataRow[] = rows.map((row) => {
+      const values = row.split(",");
+      return {
+        empID: values[0],
+        projectID: values[1],
+        fromDate: values[2],
+        toDate: parseDate(values[3]),
+      } as DataRow;
+    });
+    console.log(data);
+    setLoading("Mapped");
   };
 
   const context = {
+    state,
     setFile,
-    error,
     data: [],
   };
   return <AppContext.Provider value={context}>{children}</AppContext.Provider>;
