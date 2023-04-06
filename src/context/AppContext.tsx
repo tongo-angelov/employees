@@ -6,12 +6,18 @@ import {
   isValidCSV,
   parseDate,
 } from "../utils/helpers";
-import { AppState, DataRow, ProjectData, ProjectPair } from "./types";
+import {
+  AppState,
+  DataRow,
+  EmployeePair,
+  ProjectData,
+  ProjectPair,
+} from "./types";
 
 export type ContextType = {
   state: AppState;
   setFile: React.Dispatch<React.SetStateAction<File | undefined>>;
-  data: any[];
+  pair: EmployeePair | null;
 };
 
 export const AppContext = createContext<ContextType>({
@@ -20,7 +26,7 @@ export const AppContext = createContext<ContextType>({
     error: "",
   },
   setFile: () => {},
-  data: [],
+  pair: null,
 });
 
 type AppContextProviderProps = {
@@ -35,19 +41,24 @@ export const AppContextProvider = ({ children }: AppContextProviderProps) => {
   const [file, setFile] = useState<File>();
   const [fileData, setFileData] = useState<string | null>(null);
   const [mappedData, setMappedData] = useState<DataRow[] | null>(null);
-  const [finalData, setFinalData] = useState();
+  const [projects, setProjects] = useState<ProjectData[] | null>(null);
+  const [pairs, setPairs] = useState<EmployeePair[] | null>(null);
 
   useEffect(() => {
-    validateFile();
+    if (file) validateFile();
   }, [file]);
 
   useEffect(() => {
-    parseData();
+    if (fileData) parseData();
   }, [fileData]);
 
   useEffect(() => {
-    finalizeData();
+    if (mappedData) finalizeData();
   }, [mappedData]);
+
+  useEffect(() => {
+    if (projects) getPairs();
+  }, [projects]);
 
   const setLoading = (msg: string) => {
     setState({
@@ -125,53 +136,88 @@ export const AppContextProvider = ({ children }: AppContextProviderProps) => {
   };
 
   const finalizeData = () => {
-    if (!mappedData) return;
     setLoading("Finalizing");
 
-    // group projects
     let projectIds = new Set<string>();
-    mappedData.map((item) => projectIds.add(item.projectID));
+    mappedData!.map((item) => projectIds.add(item.projectID));
 
-    let projects: ProjectData[] = [];
+    let _projects: ProjectData[] = [];
 
     projectIds.forEach((id) => {
       // get all employees that worked on given project
-      const employees = mappedData.filter((data) => data.projectID === id);
+      const employees = mappedData!.filter((data) => data.projectID === id);
       // if only 1 employee worked on the project
       if (employees.length === 1) return;
 
-      let projectPairs: ProjectPair[] = [];
+      let pairs: ProjectPair[] = [];
       employees.forEach((emp, index) => {
         // if last item return - no pair left
         if (index + 1 === employees.length) return;
+
         // get all other employees
         const remaining = employees.slice(index + 1);
         remaining.forEach((next) => {
-          projectPairs.push({
-            employees: {
-              aID: emp.empID,
-              bID: next.empID,
-            },
-            time: calculateOverlap(emp, next),
+          const overlap = calculateOverlap(emp, next);
+          if (!overlap) return;
+
+          const pairId = [emp.empID, next.empID].sort().join("");
+          pairs.push({
+            id: pairId,
+            aID: emp.empID,
+            bID: next.empID,
+            time: overlap,
           });
         });
       });
 
-      projects.push({
+      _projects.push({
         id,
-        data: [...projectPairs].sort((a, b) => b.time - a.time),
+        pairs,
       });
     });
 
-    console.log("projects", projects);
+    console.log("projects", _projects);
+    setProjects(_projects);
 
     setLoading("Finalized");
+  };
+
+  const getPairs = () => {
+    setLoading("Calculating");
+
+    const pairs: EmployeePair[] = [];
+
+    projects!.forEach((project) => {
+      project.pairs.forEach((pair) => {
+        const item = pairs.find((p) => p.id === pair.id);
+        if (!item)
+          pairs.push({
+            ...pair,
+            projects: [{ id: project.id, time: pair.time }],
+          });
+        else {
+          item.time += pair.time;
+          const sorted = [
+            ...item.projects,
+            { id: project.id, time: pair.time },
+          ].sort((a, b) => b.time - a.time);
+          item.projects = sorted;
+        }
+      });
+    });
+
+    pairs.sort((a, b) => b.time - a.time);
+    console.log("pairs", pairs);
+    setPairs(pairs);
+
+    setLoading("Done");
   };
 
   const context = {
     state,
     setFile,
-    data: [],
+    pair: pairs ? pairs[0] : null,
   };
+
   return <AppContext.Provider value={context}>{children}</AppContext.Provider>;
 };

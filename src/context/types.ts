@@ -12,25 +12,25 @@ export type DataRow = {
 
 export type ProjectData = {
   id: string;
-  data: ProjectPair[];
+  pairs: ProjectPair[];
 };
 
 export type ProjectPair = {
-  employees: EmployeePair;
+  id: string;
+  aID: string;
+  bID: string;
   time: number;
 };
 
 export type EmployeePair = {
+  id: string;
   aID: string;
   bID: string;
+  time: number;
+  projects: EmployeeProject[];
 };
 
-export type EmployeeData = {
+export type EmployeeProject = {
   id: string;
-  data: [
-    {
-      empID: string;
-      time: number;
-    }
-  ];
+  time: number;
 };
